@@ -346,11 +346,109 @@ int lept_parse(lept_value* v, const char* json) {
     return ret;
 }
 
+static void lept_stringify_hex4(char ch, char** tch, size_t* len) {
+	char *str;
+	*len = 4;
+
+	switch (ch)
+	{
+	case 0x00: str = "0000"; break;
+	case 0x01: str = "0001"; break;
+	case 0x02: str = "0002"; break;
+	case 0x03: str = "0003"; break;
+	case 0x04: str = "0004"; break;
+	case 0x05: str = "0005"; break;
+	case 0x06: str = "0006"; break;
+	case 0x07: str = "0007"; break;
+	case 0x08: str = "0008"; break;
+	case 0x09: str = "0009"; break;
+	case 0x0a: str = "000a"; break;
+	case 0x0b: str = "000b"; break;
+	case 0x0c: str = "000c"; break;
+	case 0x0d: str = "000d"; break;
+	case 0x0e: str = "000e"; break;
+	case 0x0f: str = "000f"; break;
+	case 0x10: str = "0010"; break;
+	case 0x11: str = "0011"; break;
+	case 0x12: str = "0012"; break;
+	case 0x13: str = "0013"; break;
+	case 0x14: str = "0014"; break;
+	case 0x15: str = "0015"; break;
+	case 0x16: str = "0016"; break;
+	case 0x17: str = "0017"; break;
+	case 0x18: str = "0018"; break;
+	case 0x19: str = "0019"; break;
+	case 0x1a: str = "001a"; break;
+	case 0x1b: str = "001b"; break;
+	case 0x1c: str = "001c"; break;
+	case 0x1d: str = "001d"; break;
+	case 0x1e: str = "001e"; break;
+	case 0x1f: str = "001f"; break;
+	default:
+		str = "0000";
+		break;
+	}
+
+	memcpy(tch, str, 5);
+}
+
 static void lept_stringify_string(lept_context* c, const char* s, size_t len) {
-    /* ... */
+	size_t i;
+	char ch;
+	char tch[5];
+	size_t tlen;
+
+	i = 0;
+	PUTC(c, '\"');
+	while (i < len) {
+		ch = s[i];
+		switch (ch)
+		{
+		case '\"':
+			PUTS(c, "\\\"", 2);
+			break;
+		case '\\':
+			PUTS(c, "\\\\", 2);
+			break;
+		case '/':
+			PUTS(c, "/", 1);
+			break;
+		case '\b':
+			PUTS(c, "\\b", 2);
+			break;
+		case '\f':
+			PUTS(c, "\\f", 2);
+			break;
+		case '\n':
+			PUTS(c, "\\n", 2);
+			break;
+		case '\r':
+			PUTS(c, "\\r", 2);
+			break;
+		case '\t':
+			PUTS(c, "\\t", 2);
+			break;
+		default:
+			if ((unsigned char)ch < 0x20) {
+				PUTS(c, "\\u", 2);
+				lept_stringify_hex4(ch, &tch, &tlen);
+				PUTS(c, tch, tlen);
+			}
+			else {
+				PUTC(c, ch);
+			}
+			break;
+		}
+		i++;
+	}
+	PUTC(c, '\"');
 }
 
 static void lept_stringify_value(lept_context* c, const lept_value* v) {
+	size_t i;
+	lept_value* element;
+	lept_member* member;
+
     switch (v->type) {
         case LEPT_NULL:   PUTS(c, "null",  4); break;
         case LEPT_FALSE:  PUTS(c, "false", 5); break;
@@ -358,10 +456,36 @@ static void lept_stringify_value(lept_context* c, const lept_value* v) {
         case LEPT_NUMBER: c->top -= 32 - sprintf(lept_context_push(c, 32), "%.17g", v->u.n); break;
         case LEPT_STRING: lept_stringify_string(c, v->u.s.s, v->u.s.len); break;
         case LEPT_ARRAY:
-            /* ... */
+			if (v->u.a.size == 0) {
+				PUTS(c, "[]", 2);
+			}
+			else {
+				PUTC(c, '[');
+				for (i = 0; i < v->u.a.size; i++) {
+					element = v->u.a.e + i;
+					lept_stringify_value(c, element);
+					PUTC(c, ',');
+				}
+				c->top -= 1;
+				PUTC(c, ']');
+			}
             break;
         case LEPT_OBJECT:
-            /* ... */
+			if (v->u.o.size == 0) {
+				PUTS(c, "{}", 2);
+			}
+			else {
+				PUTC(c, '{');
+				for (i = 0; i < v->u.o.size; i++) {
+					member = v->u.o.m + i;
+					lept_stringify_string(c, member->k, member->klen);
+					PUTC(c, ':');
+					lept_stringify_value(c, &member->v);
+					PUTC(c, ',');
+				}
+				c->top -= 1;
+				PUTC(c, '}');
+			}
             break;
         default: assert(0 && "invalid type");
     }
